@@ -1,42 +1,57 @@
-const nodemailer = require('nodemailer');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+import express from 'express';
+import nodemailer from 'nodemailer';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
-// Multer setup for file uploads
-const uploadDir = path.join(__dirname, '/tmp/uploads');
+// Initialize Express
+const app = express();
+
+// Setup multer storage
+const uploadDir = path.join(__dirname, 'uploads');
+
+// Ensure the uploads directory exists
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
-const storage = multer.diskStorage({
-    destination: uploadDir,
-    filename: (req, file, cb) => cb(null, file.originalname),
-});
-const upload = multer({ storage });
 
-module.exports = async (req, res) => {
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, file.originalname);
+    }
+});
+
+const upload = multer({ storage: storage });
+
+// Configure nodemailer transporter
+const transporter = nodemailer.createTransport({
+    host: 'smtp.hostinger.com',
+    port: 465,
+    secure: true,
+    auth: {
+        user: 'career@spotcommglobal.com',
+        pass: 'Career123456789.'
+    }
+});
+
+// Define the serverless function
+export default async function handler(req, res) {
     if (req.method === 'POST') {
-        upload.single('cv')(req, res, async function (err) {
+        upload.single('cv')(req, res, (err) => {
             if (err) {
-                return res.status(400).json({ error: 'File upload error' });
+                console.error("File upload error:", err);
+                return res.status(400).json({ message: 'Error uploading file' });
             }
 
             const { fullName, email, contact, jobTitle, linkedIn } = req.body;
             const cv = req.file;
 
             if (!cv) {
-                return res.status(400).json({ error: 'No file uploaded' });
+                return res.status(400).json({ message: 'No file uploaded' });
             }
-
-            const transporter = nodemailer.createTransport({
-                host: 'smtp.hostinger.com',
-                port: 465,
-                secure: true,
-                auth: {
-                    user: 'career@spotcommglobal.com',
-                    pass: 'Career123456789.',
-                },
-            });
 
             const mailOptions = {
                 from: 'career@spotcommglobal.com',
@@ -48,6 +63,7 @@ module.exports = async (req, res) => {
                     Contact: ${contact || 'Not provided'}
                     LinkedIn: ${linkedIn || 'Not provided'}
                     Job Applied: ${jobTitle || 'Not specified'}
+                    CV: Attached file
                 `,
                 attachments: [
                     {
@@ -57,15 +73,15 @@ module.exports = async (req, res) => {
                 ],
             };
 
-            try {
-                await transporter.sendMail(mailOptions);
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    console.error('Error sending email:', error);
+                    return res.status(500).json({ message: 'Error sending email' });
+                }
                 return res.status(200).json({ message: 'Email sent successfully' });
-            } catch (error) {
-                console.error(error);
-                return res.status(500).json({ error: 'Error sending email' });
-            }
+            });
         });
     } else {
-        res.status(405).json({ error: 'Method not allowed' });
+        res.status(405).json({ message: 'Method Not Allowed' });
     }
-};
+}
