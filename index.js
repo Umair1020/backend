@@ -1,21 +1,16 @@
-const express = require('express');
-const nodemailer = require('nodemailer');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+import express from 'express';
+import nodemailer from 'nodemailer';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
-
+// Initialize Express
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
 
-
-// Define the path for the uploads directory
+// Setup multer storage
 const uploadDir = path.join(__dirname, 'uploads');
 
-// Check if the directory exists, and if not, create it
+// Ensure the uploads directory exists
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -31,7 +26,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Configure your Hostinger SMTP credentials here
+// Configure nodemailer transporter
 const transporter = nodemailer.createTransport({
     host: 'smtp.hostinger.com',
     port: 465,
@@ -42,89 +37,51 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-app.post('/send-email', upload.single('cv'), (req, res) => {
-    const { fullName, email, contact, jobTitle, linkedIn } = req.body;
-    const cv = req.file;
+// Define the serverless function
+export default async function handler(req, res) {
+    if (req.method === 'POST') {
+        upload.single('cv')(req, res, (err) => {
+            if (err) {
+                console.error("File upload error:", err);
+                return res.status(400).json({ message: 'Error uploading file' });
+            }
 
-    // Check if the file was uploaded successfully
-    if (!cv) {
-        console.error("No file uploaded");
-        return res.status(400).send('Error: No file uploaded');
+            const { fullName, email, contact, jobTitle, linkedIn } = req.body;
+            const cv = req.file;
+
+            if (!cv) {
+                return res.status(400).json({ message: 'No file uploaded' });
+            }
+
+            const mailOptions = {
+                from: 'career@spotcommglobal.com',
+                to: 'career@spotcommglobal.com',
+                subject: `New Job Application for ${jobTitle || 'Job Position'}`,
+                text: `
+                    Full Name: ${fullName || 'Not provided'}
+                    Email: ${email || 'Not provided'}
+                    Contact: ${contact || 'Not provided'}
+                    LinkedIn: ${linkedIn || 'Not provided'}
+                    Job Applied: ${jobTitle || 'Not specified'}
+                    CV: Attached file
+                `,
+                attachments: [
+                    {
+                        filename: cv.originalname,
+                        path: cv.path,
+                    },
+                ],
+            };
+
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    console.error('Error sending email:', error);
+                    return res.status(500).json({ message: 'Error sending email' });
+                }
+                return res.status(200).json({ message: 'Email sent successfully' });
+            });
+        });
+    } else {
+        res.status(405).json({ message: 'Method Not Allowed' });
     }
-
-    const mailOptions = {
-        from: 'career@spotcommglobal.com',
-        to: 'career@spotcommglobal.com',
-        subject: `New Job Application for ${jobTitle || 'Job Position'}`,
-        text: `
-            Full Name: ${fullName || 'Not provided'}
-            Email: ${email || 'Not provided'}
-            Contact: ${contact || 'Not provided'}
-             LinkedIn: ${linkedIn || 'Not provided'}
-            Job Applied: ${jobTitle || 'Not specified'}
-            CV: Attached file
-        `,
-        attachments: [
-            {
-                filename: cv.originalname,
-                path: cv.path,  // Access the file's path directly from multer's output
-            },
-        ],
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-            console.error(error);
-            return res.status(500).send('Error sending email');
-        }
-        res.status(200).send('Email sent successfully');
-    });
-});
-
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
-// const express = require("express");
-// const mysql = require("mysql2");
-// const cors = require("cors");
-
-// const app = express();
-// app.use(cors());
-
-// // Database connection
-// const db = mysql.createConnection({
-//   host: "localhost",
-//   user: "wglenn",
-//   password: "P0pc0rn182!",
-//   database: "CYAN",
-// });
-
-// // Route to get settings data (Last Updated value)
-// app.get("/settings", (req, res) => {
-//   db.query("SELECT DBValue FROM Settings WHERE id = 3", (err, result) => {
-//     if (err) {
-//       console.error("Error fetching settings:", err);
-//       res.status(500).send("Error fetching settings");
-//     } else {
-//       res.json(result[0]);
-//     }
-//   });
-// });
-
-// // Route to get backhauls data
-// app.get("/backhauls", (req, res) => {
-//   db.query("SELECT * FROM Backhauls ORDER BY Name", (err, result) => {
-//     if (err) {
-//       console.error("Error fetching backhauls:", err);
-//       res.status(500).send("Error fetching backhauls");
-//     } else {
-//       res.json(result);
-//     }
-//   });
-// });
-
-// const PORT = 5000;
-// app.listen(PORT, () => {
-//   console.log(`Server running on http://localhost:${PORT}`);
-// });
+}
