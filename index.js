@@ -41,11 +41,9 @@ const transporter = nodemailer.createTransport({
         pass: 'Career123456789.'
     }
 });
-app.get('/', (req, res) => {
-    res.json({
-        message: "hello world"
-    })
-})
+app.get('/home', (req, res) => {
+    res.status(200).json('Welcome, your app is working well');
+  });
 app.post('/send-email', upload.single('cv'), (req, res) => {
     const { fullName, email, contact, jobTitle, linkedIn } = req.body;
     const cv = req.file;
